@@ -26,8 +26,8 @@ if (!FORCE_OFFLINE) {
 
 // Sabit Kullanıcı (Admin)
 const ADMIN_USER = {
-    username: 'admin',
-    password: '123'
+    username: 'elxan',
+    password: '1234'
 };
 
 
