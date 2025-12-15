@@ -15,7 +15,7 @@ app.use(express.json());
 const FORCE_OFFLINE = false; // Offline modu manuel olarak kontrol et
 
 if (!FORCE_OFFLINE) {
-    mongoose.connect('mongodb://51.12.223.183:27017/nfcAttendanceDB').then(() => {
+    mongoose.connect('mongodb://nfcuser:StrongPassword123@127.0.0.1:27017/nfcAttendanceDB?authSource=nfcAttendanceDB').then(() => {
         console.log('MongoDB Database qoşuldu.');
     }).catch((err) => {
         console.error('MongoDB qoşulma xətası: (Offline modda başlayacaq)');
