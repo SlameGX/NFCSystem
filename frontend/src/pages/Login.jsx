@@ -14,7 +14,7 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const res = await axios.post('http://51.12.223.183:5000/api/login', formData);
+            const res = await axios.post('/api/login', formData);
             if (res.data.success) {
                 localStorage.setItem('isAuthenticated', 'true');
                 navigate('/dashboard');
