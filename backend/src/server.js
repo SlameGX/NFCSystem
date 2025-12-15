@@ -45,7 +45,7 @@ app.post('/api/login', (req, res) => {
 
 app.post('/api/check-nfc', async (req, res) => {
     const { nfcData } = req.body;
-    console.log("GSM VERİ GELDİ");
+    console.log(req.body);
     if (!nfcData) return res.status(400).json({ message: 'NFC bilgisi çatışmır' });
 
     let responseData;
