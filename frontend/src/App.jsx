@@ -22,7 +22,7 @@ function App() {
         } />
 
         {/* Varsayılan olarak dashboard'a, oradan da login'e yönlendir */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );
