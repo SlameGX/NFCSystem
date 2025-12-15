@@ -24,25 +24,24 @@ if (!FORCE_OFFLINE) {
     console.log('⚠️ OFFLINE MOD AKTİV: Database qoşulmayacaq.');
 }
 
+
+let scanHistory = [];
 // Sabit Kullanıcı (Admin)
 const ADMIN_USER = {
     username: 'elxan',
     password: '1234'
 };
 
-
-let scanHistory = [];
-
-// --- ENDPOINTLER ---
-
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
+
     if (username === ADMIN_USER.username && password === ADMIN_USER.password) {
-        res.json({ success: true, message: 'Giriş uğurlu' });
-    } else {
-        res.status(401).json({ success: false, message: 'Xətalı istifadəçi adı və ya şifrə' });
+        return res.json({ success: true, message: 'Giriş uğurlu' });
     }
+
+    res.status(401).json({ success: false, message: 'Xətalı istifadəçi adı və ya şifrə' });
 });
+
 
 app.post('/api/check-nfc', async (req, res) => {
     const { nfcData } = req.body;
