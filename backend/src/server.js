@@ -1,273 +1,169 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+require('dotenv').config();
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const Student = require('./models/Student');
 
-/* INPUT STYLE */
-const inputStyle = {
-    width: '100%',
-    padding: '0.7rem',
-    marginTop: '0.8rem',
-    borderRadius: '8px',
-    border: '1px solid var(--glass-border)',
-    background: 'rgba(255,255,255,0.08)',
-    color: '#fff',
-    outline: 'none'
-};
+const app = express();
+const PORT = process.env.PORT || 5000;
 
-const Dashboard = () => {
-    const [scanHistory, setScanHistory] = useState([]);
+/* ================= MIDDLEWARE ================= */
+app.use(cors());
+app.use(express.json());
 
-    // MODAL & FORM
-    const [showAddStudent, setShowAddStudent] = useState(false);
-    const [studentName, setStudentName] = useState('');
-    const [nfcUid, setNfcUid] = useState('');
-    const [isReadingNfc, setIsReadingNfc] = useState(false);
+/* ================= DB BAGLANTI ================= */
+const FORCE_OFFLINE = false;
 
-    const navigate = useNavigate();
+if (!FORCE_OFFLINE) {
+    mongoose.connect(
+        'mongodb://nfcuser:StrongPassword123@127.0.0.1:27017/nfcAttendanceDB?authSource=nfcAttendanceDB'
+    ).then(() => {
+        console.log('MongoDB qoşuldu');
+    }).catch(() => {
+        console.log('MongoDB xətası – Offline moda keçildi');
+    });
+} else {
+    console.log('OFFLINE MOD AKTİV');
+}
 
-    /* LOGOUT */
-    const handleLogout = () => {
-        localStorage.removeItem('isAuthenticated');
-        navigate('/login');
-    };
+/* ================= LOGIN ================= */
+const ADMIN_USER = { username: 'elxan', password: '1234' };
 
-    /* HISTORY POLLING */
-    useEffect(() => {
-        fetchHistory();
-        const interval = setInterval(fetchHistory, 2000);
-        return () => clearInterval(interval);
-    }, []);
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    if (username === ADMIN_USER.username && password === ADMIN_USER.password) {
+        return res.json({ success: true });
+    }
+    res.status(401).json({ success: false });
+});
 
-    const fetchHistory = async () => {
+/* ================= NFC GLOBAL STATE ================= */
+let scanHistory = [];
+let waitingForNfc = false;
+let lastNfcUid = null;
+
+/* ================= NFC START WAIT ================= */
+app.post('/api/nfc/start-wait', (req, res) => {
+    waitingForNfc = true;
+    lastNfcUid = null;
+
+    console.log('📡 NFC BEKLEME MODU AKTİF');
+
+    res.json({ success: true });
+});
+
+/* ================= NFC CHECK ================= */
+app.post('/api/check-nfc', async (req, res) => {
+    const { nfcData } = req.body;
+    if (!nfcData) return res.status(400).json({ found: false });
+
+    // 👉 ÖĞRENCİ EKLEME MODU
+    if (waitingForNfc) {
+        lastNfcUid = nfcData;
+
+        console.log('🆕 Öğrenci ekleme için NFC alındı:', nfcData);
+
+        return res.json({
+            found: true,
+            name: null,
+            message: 'NFC UID alındı (öğrenci ekleme)',
+            uid: nfcData,
+            timestamp: new Date()
+        });
+    }
+
+    /* ===== NORMAL YOKLAMA ===== */
+    let responseData;
+
+    // OFFLINE
+    if (mongoose.connection.readyState !== 1) {
+        if (nfcData === "0x00 0x00") {
+            responseData = {
+                found: true,
+                message: "Elxan Kerimov derste",
+                timestamp: new Date()
+            };
+        } else {
+            responseData = {
+                found: false,
+                message: "Tanımsız kart",
+                timestamp: new Date()
+            };
+        }
+    }
+    // ONLINE
+    else {
         try {
-            const res = await axios.get('/api/scan-history');
-            if (Array.isArray(res.data)) {
-                setScanHistory(res.data);
+            const student = await Student.findOne({ nfcUid: nfcData });
+
+            if (student) {
+                responseData = {
+                    found: true,
+                    message: `${student.fullName} derste`,
+                    timestamp: new Date()
+                };
+            } else {
+                responseData = {
+                    found: false,
+                    message: "Tanımsız kart",
+                    timestamp: new Date()
+                };
             }
         } catch (err) {
-            console.error("History alınamadı", err);
+            return res.status(500).json({ found: false });
         }
-    };
+    }
 
-    /* NORMAL NFC SIMULATION (YOKLAMA) */
-    const handleSimulation = async (nfcData) => {
-        try {
-            await axios.post('/api/check-nfc', { nfcData });
-            fetchHistory();
-        } catch (err) {
-            alert('Simulyasiya xətası');
+    scanHistory.unshift(responseData);
+    if (scanHistory.length > 50) scanHistory.pop();
+
+    res.json(responseData);
+});
+
+/* ================= GET LAST NFC ================= */
+app.get('/api/nfc/latest', (req, res) => {
+    res.json({ uid: lastNfcUid });
+});
+
+/* ================= ADD STUDENT ================= */
+app.post('/api/students', async (req, res) => {
+    const { name, nfcUid } = req.body;
+
+    if (!name || !nfcUid) {
+        return res.status(400).json({ message: 'Eksik bilgi' });
+    }
+
+    try {
+        const exists = await Student.findOne({ nfcUid });
+        if (exists) {
+            return res.status(409).json({ message: 'Bu NFC zaten kayıtlı' });
         }
-    };
 
-    /* ================= NFC OKUT (BACKEND BEKLEME MODU) ================= */
-    const handleReadNfc = async () => {
-        setIsReadingNfc(true);
-        setNfcUid('');
+        const student = new Student({
+            fullName: name,
+            nfcUid
+        });
 
-        try {
-            // 1️⃣ Backend'e "bekle" de
-            await axios.post('/api/nfc/start-wait');
+        await student.save();
 
-            // 2️⃣ UID gelene kadar polling
-            const interval = setInterval(async () => {
-                const res = await axios.get('/api/nfc/latest');
+        // STATE RESET
+        waitingForNfc = false;
+        lastNfcUid = null;
 
-                if (res.data.uid) {
-                    setNfcUid(res.data.uid);
-                    setIsReadingNfc(false);
-                    clearInterval(interval);
-                }
-            }, 1000);
+        console.log('✅ Yeni öğrenci eklendi:', name);
 
-        } catch (err) {
-            setIsReadingNfc(false);
-            alert('NFC oxuma başlatılamadı');
-        }
-    };
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ message: 'DB xətası' });
+    }
+});
 
-    /* ================= SAVE STUDENT ================= */
-    const handleSaveStudent = async () => {
-        if (!studentName || !nfcUid) return;
+/* ================= HISTORY ================= */
+app.get('/api/scan-history', (req, res) => {
+    res.json(scanHistory);
+});
 
-        try {
-            await axios.post('/api/students', {
-                name: studentName,
-                nfcUid
-            });
-
-            // RESET
-            setStudentName('');
-            setNfcUid('');
-            setShowAddStudent(false);
-
-        } catch (err) {
-            alert(err.response?.data?.message || 'Kayıt xətası');
-        }
-    };
-
-    return (
-        <div className="container animate-fade-in">
-
-            {/* NAVBAR */}
-            <nav className="nav glass" style={{ padding: '1rem 2rem' }}>
-                <div className="logo">NFC Yoklama</div>
-                <button
-                    onClick={handleLogout}
-                    className="btn"
-                    style={{ background: 'transparent', border: '1px solid var(--text-muted)' }}
-                >
-                    Çıxış
-                </button>
-            </nav>
-
-            <div style={{ display: 'grid', gap: '2rem' }}>
-
-                {/* HISTORY */}
-                <div className="glass status-card" style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                    <h2 style={{
-                        color: 'var(--text-muted)',
-                        marginBottom: '1rem',
-                        position: 'sticky',
-                        top: 0,
-                        background: 'rgba(255,255,255,0.05)',
-                        backdropFilter: 'blur(10px)',
-                        padding: '10px',
-                        zIndex: 10,
-                        borderRadius: '8px'
-                    }}>
-                        Son Oxunan Kartlar
-                    </h2>
-
-                    {scanHistory.length === 0 ? (
-                        <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>
-                            Hələ kart oxudulmadı...
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            {scanHistory.map((scan, index) => (
-                                <div
-                                    key={index}
-                                    className="glass"
-                                    style={{
-                                        padding: '1rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        borderLeft: `5px solid ${scan.found ? 'var(--primary)' : 'var(--error)'}`,
-                                        background: 'rgba(255,255,255,0.03)'
-                                    }}
-                                >
-                                    <div style={{ fontSize: '1.5rem', marginRight: '1rem' }}>
-                                        {scan.found ? '✅' : '❌'}
-                                    </div>
-                                    <div>
-                                        <div style={{ fontWeight: 'bold' }}>{scan.message}</div>
-                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                            {new Date(scan.timestamp).toLocaleTimeString()}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* ALT PANEL */}
-                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-
-                    {/* SIMULATION */}
-                    <div className="glass" style={{ flex: '1 1 65%', padding: '2rem' }}>
-                        <h3>🛠 Simulyasiya</h3>
-                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                            <button className="btn" style={{ flex: 1 }} onClick={() => handleSimulation("0x00 0x00")}>
-                                ✅ Düzgün Kart
-                            </button>
-                            <button
-                                className="btn"
-                                style={{ flex: 1, background: 'var(--error)' }}
-                                onClick={() => handleSimulation("0x99 0x99")}
-                            >
-                                ❌ Səhv Kart
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* ADD STUDENT */}
-                    <div className="glass" style={{ flex: '1 1 30%', padding: '2rem', textAlign: 'center' }}>
-                        <div style={{ fontSize: '2.5rem' }}>➕</div>
-                        <h4>Yeni Öğrenci</h4>
-                        <button className="btn" style={{ width: '100%' }} onClick={() => setShowAddStudent(true)}>
-                            Öğrenci Ekle
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* MODAL */}
-            {showAddStudent && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        inset: 0,
-                        background: 'rgba(0,0,0,0.6)',
-                        backdropFilter: 'blur(6px)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 9999
-                    }}
-                    onClick={() => setShowAddStudent(false)}
-                >
-                    <div
-                        className="glass"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ width: '380px', padding: '2rem', borderRadius: '16px' }}
-                    >
-                        <h3>➕ Yeni Öğrenci</h3>
-
-                        <input
-                            placeholder="Ad Soyad"
-                            value={studentName}
-                            onChange={(e) => setStudentName(e.target.value)}
-                            style={inputStyle}
-                        />
-
-                        <button
-                            className="btn"
-                            style={{ width: '100%', marginTop: '1rem' }}
-                            onClick={handleReadNfc}
-                            disabled={isReadingNfc}
-                        >
-                            {isReadingNfc ? 'NFC gözlənilir...' : '📡 NFC Kart Okut'}
-                        </button>
-
-                        {nfcUid && (
-                            <div style={{ marginTop: '0.8rem', color: 'var(--primary)' }}>
-                                Oxunan UID: {nfcUid}
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                            <button
-                                className="btn"
-                                style={{ flex: 1 }}
-                                disabled={!studentName || !nfcUid}
-                                onClick={handleSaveStudent}
-                            >
-                                Kaydet
-                            </button>
-                            <button
-                                className="btn"
-                                style={{ flex: 1, background: 'var(--error)' }}
-                                onClick={() => setShowAddStudent(false)}
-                            >
-                                İptal
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-export default Dashboard;
+/* ================= SERVER ================= */
+app.listen(PORT, () => {
+    console.log(`Server ${PORT} portunda işləyir`);
+});

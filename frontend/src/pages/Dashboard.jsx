@@ -17,7 +17,7 @@ const inputStyle = {
 const Dashboard = () => {
     const [scanHistory, setScanHistory] = useState([]);
 
-    /* MODAL & FORM STATE */
+    // MODAL & FORM
     const [showAddStudent, setShowAddStudent] = useState(false);
     const [studentName, setStudentName] = useState('');
     const [nfcUid, setNfcUid] = useState('');
@@ -31,7 +31,7 @@ const Dashboard = () => {
         navigate('/login');
     };
 
-    /* FETCH HISTORY */
+    /* HISTORY POLLING */
     useEffect(() => {
         fetchHistory();
         const interval = setInterval(fetchHistory, 2000);
@@ -45,49 +45,64 @@ const Dashboard = () => {
                 setScanHistory(res.data);
             }
         } catch (err) {
-            console.error("Data gəlmədi", err);
+            console.error("History alınamadı", err);
         }
     };
 
-    /* SIMULATION */
+    /* NORMAL NFC SIMULATION (YOKLAMA) */
     const handleSimulation = async (nfcData) => {
         try {
             await axios.post('/api/check-nfc', { nfcData });
             fetchHistory();
-        } catch (error) {
-            const errorMsg =
-                error.response?.data?.message ||
-                error.message ||
-                "Bilinmeyen xəta";
-            alert(`Simulyasiya xətası: ${errorMsg}`);
+        } catch (err) {
+            alert('Simulyasiya xətası');
         }
     };
 
-    /* NFC READ (SIMULATION FOR NOW) */
-    const handleReadNfc = () => {
+    /* ================= NFC OKUT (BACKEND BEKLEME MODU) ================= */
+    const handleReadNfc = async () => {
         setIsReadingNfc(true);
         setNfcUid('');
 
-        setTimeout(() => {
-            const fakeUid = "0xA1 0xB2";
-            setNfcUid(fakeUid);
+        try {
+            // 1️⃣ Backend'e "bekle" de
+            await axios.post('/api/nfc/start-wait');
+
+            // 2️⃣ UID gelene kadar polling
+            const interval = setInterval(async () => {
+                const res = await axios.get('/api/nfc/latest');
+
+                if (res.data.uid) {
+                    setNfcUid(res.data.uid);
+                    setIsReadingNfc(false);
+                    clearInterval(interval);
+                }
+            }, 1000);
+
+        } catch (err) {
             setIsReadingNfc(false);
-        }, 1500);
+            alert('NFC oxuma başlatılamadı');
+        }
     };
 
-    /* SAVE STUDENT (ŞİMDİLİK LOG) */
-    const handleSaveStudent = () => {
+    /* ================= SAVE STUDENT ================= */
+    const handleSaveStudent = async () => {
         if (!studentName || !nfcUid) return;
 
-        console.log({
-            name: studentName,
-            nfcUid
-        });
+        try {
+            await axios.post('/api/students', {
+                name: studentName,
+                nfcUid
+            });
 
-        // reset
-        setStudentName('');
-        setNfcUid('');
-        setShowAddStudent(false);
+            // RESET
+            setStudentName('');
+            setNfcUid('');
+            setShowAddStudent(false);
+
+        } catch (err) {
+            alert(err.response?.data?.message || 'Kayıt xətası');
+        }
     };
 
     return (
@@ -99,10 +114,7 @@ const Dashboard = () => {
                 <button
                     onClick={handleLogout}
                     className="btn"
-                    style={{
-                        background: 'transparent',
-                        border: '1px solid var(--text-muted)'
-                    }}
+                    style={{ background: 'transparent', border: '1px solid var(--text-muted)' }}
                 >
                     Çıxış
                 </button>
@@ -112,24 +124,22 @@ const Dashboard = () => {
 
                 {/* HISTORY */}
                 <div className="glass status-card" style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                    <h2
-                        style={{
-                            color: 'var(--text-muted)',
-                            marginBottom: '1rem',
-                            position: 'sticky',
-                            top: 0,
-                            background: 'rgba(255,255,255,0.05)',
-                            backdropFilter: 'blur(10px)',
-                            padding: '10px',
-                            zIndex: 10,
-                            borderRadius: '8px'
-                        }}
-                    >
-                        Son Oxunan Kartlar (Giriş Keçmişi)
+                    <h2 style={{
+                        color: 'var(--text-muted)',
+                        marginBottom: '1rem',
+                        position: 'sticky',
+                        top: 0,
+                        background: 'rgba(255,255,255,0.05)',
+                        backdropFilter: 'blur(10px)',
+                        padding: '10px',
+                        zIndex: 10,
+                        borderRadius: '8px'
+                    }}>
+                        Son Oxunan Kartlar
                     </h2>
 
                     {scanHistory.length === 0 ? (
-                        <div style={{ padding: '2rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>
+                        <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>
                             Hələ kart oxudulmadı...
                         </div>
                     ) : (
@@ -151,12 +161,9 @@ const Dashboard = () => {
                                     </div>
                                     <div>
                                         <div style={{ fontWeight: 'bold' }}>{scan.message}</div>
-                                        {scan.timestamp && (
-                                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                                {new Date(scan.timestamp).toLocaleTimeString()} –{' '}
-                                                {new Date(scan.timestamp).toLocaleDateString()}
-                                            </div>
-                                        )}
+                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                            {new Date(scan.timestamp).toLocaleTimeString()}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -164,48 +171,30 @@ const Dashboard = () => {
                     )}
                 </div>
 
-                {/* BOTTOM */}
+                {/* ALT PANEL */}
                 <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
 
                     {/* SIMULATION */}
                     <div className="glass" style={{ flex: '1 1 65%', padding: '2rem' }}>
-                        <h3 style={{ marginBottom: '1rem' }}>🛠 Simulyasiya Paneli</h3>
-                        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                            GSM modulunu simulyasiya etmək üçün aşağıdakı düymələrdən istifadə edin.
-                        </p>
-
-                        <div style={{ display: 'flex', gap: '1rem' }}>
+                        <h3>🛠 Simulyasiya</h3>
+                        <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                             <button className="btn" style={{ flex: 1 }} onClick={() => handleSimulation("0x00 0x00")}>
-                                ✅ Düzgün Kart Oxut
+                                ✅ Düzgün Kart
                             </button>
                             <button
                                 className="btn"
                                 style={{ flex: 1, background: 'var(--error)' }}
                                 onClick={() => handleSimulation("0x99 0x99")}
                             >
-                                ❌ Səhv Kart Oxut
+                                ❌ Səhv Kart
                             </button>
                         </div>
                     </div>
 
-                    {/* ADD STUDENT CARD */}
-                    <div
-                        className="glass"
-                        style={{
-                            flex: '1 1 30%',
-                            padding: '2rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            textAlign: 'center'
-                        }}
-                    >
-                        <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>➕</div>
+                    {/* ADD STUDENT */}
+                    <div className="glass" style={{ flex: '1 1 30%', padding: '2rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '2.5rem' }}>➕</div>
                         <h4>Yeni Öğrenci</h4>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                            NFC kart oxudaraq tələbə əlavə et
-                        </p>
-
                         <button className="btn" style={{ width: '100%' }} onClick={() => setShowAddStudent(true)}>
                             Öğrenci Ekle
                         </button>
@@ -224,23 +213,16 @@ const Dashboard = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        zIndex: 9999,
-                        animation: 'fadeIn 0.25s ease'
+                        zIndex: 9999
                     }}
                     onClick={() => setShowAddStudent(false)}
                 >
                     <div
                         className="glass"
                         onClick={(e) => e.stopPropagation()}
-                        style={{
-                            width: '380px',
-                            padding: '2rem',
-                            borderRadius: '16px',
-                            animation: 'scaleIn 0.25s ease',
-                            textAlign: 'center'
-                        }}
+                        style={{ width: '380px', padding: '2rem', borderRadius: '16px' }}
                     >
-                        <h3 style={{ marginBottom: '1rem' }}>➕ Yeni Öğrenci</h3>
+                        <h3>➕ Yeni Öğrenci</h3>
 
                         <input
                             placeholder="Ad Soyad"
@@ -255,11 +237,11 @@ const Dashboard = () => {
                             onClick={handleReadNfc}
                             disabled={isReadingNfc}
                         >
-                            {isReadingNfc ? 'NFC Oxunur...' : '📡 NFC Kart Oxut'}
+                            {isReadingNfc ? 'NFC gözlənilir...' : '📡 NFC Kart Okut'}
                         </button>
 
                         {nfcUid && (
-                            <div style={{ marginTop: '0.8rem', fontSize: '0.85rem', color: 'var(--primary)' }}>
+                            <div style={{ marginTop: '0.8rem', color: 'var(--primary)' }}>
                                 Oxunan UID: {nfcUid}
                             </div>
                         )}
