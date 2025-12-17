@@ -5,143 +5,70 @@ const cors = require('cors');
 const Student = require('./models/Student');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 
 /* ================= MIDDLEWARE ================= */
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
+app.use(cors());
 app.use(express.json());
 
-/* ================= DB BAGLANTI ================= */
-const FORCE_OFFLINE = false;
-
-if (!FORCE_OFFLINE) {
-    mongoose.connect(
-        'mongodb://nfcuser:StrongPassword123@127.0.0.1:27017/nfcAttendanceDB?authSource=nfcAttendanceDB'
-    ).then(() => {
-        console.log('✅ MongoDB qoşuldu');
-    }).catch((err) => {
-        console.log('⚠️ MongoDB xətası – Offline moda keçildi');
-        console.error(err.message);
-    });
-} else {
-    console.log('⚠️ OFFLINE MOD AKTİV');
-}
+/* ================= DB ================= */
+mongoose.connect(
+    'mongodb://nfcuser:StrongPassword123@127.0.0.1:27017/nfcAttendanceDB?authSource=nfcAttendanceDB'
+).then(() => {
+    console.log('✅ MongoDB connected');
+}).catch(err => {
+    console.error('❌ MongoDB error:', err.message);
+});
 
 /* ================= LOGIN ================= */
-const ADMIN_USER = { username: 'elxan', password: '1234' };
-
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
-
-    if (username === ADMIN_USER.username && password === ADMIN_USER.password) {
+    if (username === 'elxan' && password === '1234') {
         return res.json({ success: true });
     }
-
     res.status(401).json({ success: false });
 });
 
-/* ================= NFC GLOBAL STATE ================= */
+/* ================= NFC STATE ================= */
 let scanHistory = [];
 let waitingForNfc = false;
 let lastNfcUid = null;
 
-/* ================= DEBUG (POST ÇALIŞIYOR MU?) ================= */
+/* ================= DEBUG ================= */
 app.post('/api/_debug/post-test', (req, res) => {
-    console.log('🧪 DEBUG POST OK', req.body);
-    res.json({ ok: true, body: req.body || null });
+    res.json({ ok: true, body: req.body });
 });
 
-/* ================= NFC START WAIT ================= */
+/* ================= NFC START ================= */
 app.post('/api/nfc/start-wait', (req, res) => {
     waitingForNfc = true;
     lastNfcUid = null;
-
     console.log('📡 NFC BEKLEME MODU AKTİF');
-
-    res.json({
-        success: true,
-        waitingForNfc: true
-    });
+    res.json({ success: true });
 });
 
 /* ================= NFC CHECK ================= */
 app.post('/api/check-nfc', async (req, res) => {
     const { nfcData } = req.body;
+    if (!nfcData) return res.status(400).json({ message: 'NFC yok' });
 
-    if (!nfcData) {
-        return res.status(400).json({
-            found: false,
-            message: 'NFC verisi yoxdur'
-        });
-    }
-
-    /* ===== ÖĞRENCİ EKLEME MODU ===== */
     if (waitingForNfc) {
         lastNfcUid = nfcData;
-
-        console.log('🆕 Öğrenci ekleme üçün NFC alındı:', nfcData);
-
-        return res.json({
-            found: true,
-            message: 'NFC UID alındı (öğrenci ekleme)',
-            uid: nfcData,
-            timestamp: new Date()
-        });
+        return res.json({ uid: nfcData });
     }
 
-    /* ===== NORMAL YOKLAMA ===== */
-    let responseData;
+    const student = await Student.findOne({ nfcUid: nfcData });
+    const response = student
+        ? { found: true, message: `${student.fullName} derste` }
+        : { found: false, message: 'Tanımsız kart' };
 
-    if (mongoose.connection.readyState !== 1) {
-        // OFFLINE
-        if (nfcData === "0x00 0x00") {
-            responseData = {
-                found: true,
-                message: "Elxan Kerimov derste",
-                timestamp: new Date()
-            };
-        } else {
-            responseData = {
-                found: false,
-                message: "Tanımsız kart",
-                timestamp: new Date()
-            };
-        }
-    } else {
-        // ONLINE
-        try {
-            const student = await Student.findOne({ nfcUid: nfcData });
-
-            if (student) {
-                responseData = {
-                    found: true,
-                    message: `${student.fullName} derste`,
-                    timestamp: new Date()
-                };
-            } else {
-                responseData = {
-                    found: false,
-                    message: "Tanımsız kart",
-                    timestamp: new Date()
-                };
-            }
-        } catch (err) {
-            console.error('❌ DB HATASI:', err);
-            return res.status(500).json({ found: false });
-        }
-    }
-
-    scanHistory.unshift(responseData);
+    scanHistory.unshift({ ...response, timestamp: new Date() });
     if (scanHistory.length > 50) scanHistory.pop();
 
-    res.json(responseData);
+    res.json(response);
 });
 
-/* ================= GET LAST NFC ================= */
+/* ================= LAST NFC ================= */
 app.get('/api/nfc/latest', (req, res) => {
     res.json({ uid: lastNfcUid });
 });
@@ -149,35 +76,17 @@ app.get('/api/nfc/latest', (req, res) => {
 /* ================= ADD STUDENT ================= */
 app.post('/api/students', async (req, res) => {
     const { name, nfcUid } = req.body;
+    if (!name || !nfcUid) return res.status(400).json({ message: 'Eksik' });
 
-    if (!name || !nfcUid) {
-        return res.status(400).json({ message: 'Eksik bilgi' });
-    }
+    const exists = await Student.findOne({ nfcUid });
+    if (exists) return res.status(409).json({ message: 'Zaten kayıtlı' });
 
-    try {
-        const exists = await Student.findOne({ nfcUid });
-        if (exists) {
-            return res.status(409).json({ message: 'Bu NFC artıq mövcuddur' });
-        }
+    await new Student({ fullName: name, nfcUid }).save();
 
-        const student = new Student({
-            fullName: name,
-            nfcUid
-        });
+    waitingForNfc = false;
+    lastNfcUid = null;
 
-        await student.save();
-
-        // RESET STATE
-        waitingForNfc = false;
-        lastNfcUid = null;
-
-        console.log('✅ Yeni öğrenci eklendi:', name);
-
-        res.json({ success: true });
-    } catch (err) {
-        console.error('❌ STUDENT SAVE ERROR:', err);
-        res.status(500).json({ message: 'DB xətası' });
-    }
+    res.json({ success: true });
 });
 
 /* ================= HISTORY ================= */
@@ -185,13 +94,7 @@ app.get('/api/scan-history', (req, res) => {
     res.json(scanHistory);
 });
 
-/* ================= GLOBAL ERROR HANDLER ================= */
-app.use((err, req, res, next) => {
-    console.error('🔥 EXPRESS ERROR:', err);
-    res.status(500).json({ message: 'Server error' });
-});
-
-/* ================= SERVER ================= */
+/* ================= START ================= */
 app.listen(PORT, () => {
-    console.log(`🚀 Server ${PORT} portunda işləyir`);
+    console.log(`🚀 Backend running on ${PORT}`);
 });
