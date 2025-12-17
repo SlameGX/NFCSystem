@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import './Dashboard.css'; // <-- CSS burada import ediliyor
+import './Dashboard.css';
 
 /* INPUT STYLE */
 const inputStyle = {
@@ -18,11 +18,17 @@ const inputStyle = {
 const Dashboard = () => {
     const [scanHistory, setScanHistory] = useState([]);
 
-    // MODAL & FORM
+    // ADD STUDENT
     const [showAddStudent, setShowAddStudent] = useState(false);
     const [studentName, setStudentName] = useState('');
     const [nfcUid, setNfcUid] = useState('');
     const [isReadingNfc, setIsReadingNfc] = useState(false);
+
+    // DELETE STUDENT
+    const [showDeleteStudent, setShowDeleteStudent] = useState(false);
+    const [isDeletingNfc, setIsDeletingNfc] = useState(false);
+    const [deleteUid, setDeleteUid] = useState(null);
+    const deleteIntervalRef = useRef(null);
 
     const navigate = useNavigate();
 
@@ -32,7 +38,7 @@ const Dashboard = () => {
         navigate('/login');
     };
 
-    /* HISTORY POLLING */
+    /* HISTORY */
     useEffect(() => {
         fetchHistory();
         const interval = setInterval(fetchHistory, 2000);
@@ -43,59 +49,84 @@ const Dashboard = () => {
         try {
             const res = await axios.get('/api/scan-history');
             if (Array.isArray(res.data)) setScanHistory(res.data);
-        } catch (err) {
-            console.error('History alınamadı', err);
-        }
+        } catch {}
     };
 
     /* SIMULATION */
     const handleSimulation = async (nfcData) => {
-        try {
-            await axios.post('/api/check-nfc', { nfcData });
-            fetchHistory();
-        } catch {
-            alert('Simulyasiya xətası');
-        }
+        await axios.post('/api/check-nfc', { nfcData });
+        fetchHistory();
     };
 
-    /* NFC READ */
+    /* ADD NFC READ */
     const handleReadNfc = async () => {
+        if (isReadingNfc) return;
+
         setIsReadingNfc(true);
         setNfcUid('');
 
-        try {
-            await axios.post('/api/nfc/start-wait');
+        await axios.post('/api/nfc/start-wait');
 
-            const interval = setInterval(async () => {
-                const res = await axios.get('/api/nfc/latest');
-                if (res.data.uid) {
-                    setNfcUid(res.data.uid);
-                    setIsReadingNfc(false);
-                    clearInterval(interval);
-                }
-            }, 1000);
-        } catch {
-            setIsReadingNfc(false);
-            alert('NFC oxuma başlaya bilmədi.');
-        }
+        const interval = setInterval(async () => {
+            const res = await axios.get('/api/nfc/latest');
+            if (res.data.uid) {
+                setNfcUid(res.data.uid);
+                setIsReadingNfc(false);
+                clearInterval(interval);
+            }
+        }, 1000);
     };
 
     /* SAVE STUDENT */
     const handleSaveStudent = async () => {
         if (!studentName || !nfcUid) return;
 
-        try {
-            await axios.post('/api/students', {
-                name: studentName,
-                nfcUid
-            });
+        await axios.post('/api/students', {
+            name: studentName,
+            nfcUid
+        });
 
-            setStudentName('');
-            setNfcUid('');
-            setShowAddStudent(false);
-        } catch (err) {
-            alert(err.response?.data?.message || 'Qeydiyyat xətası');
+        setStudentName('');
+        setNfcUid('');
+        setShowAddStudent(false);
+    };
+
+    /* DELETE NFC READ */
+    const handleDeleteReadNfc = async () => {
+        if (isDeletingNfc) {
+            clearInterval(deleteIntervalRef.current);
+            deleteIntervalRef.current = null;
+            setIsDeletingNfc(false);
+            return;
         }
+
+        setIsDeletingNfc(true);
+        setDeleteUid(null);
+
+        await axios.post('/api/nfc/start-delete');
+
+        deleteIntervalRef.current = setInterval(async () => {
+            const res = await axios.get('/api/nfc/latest');
+            if (res.data.uid) {
+                setDeleteUid(res.data.uid);
+                setIsDeletingNfc(false);
+                clearInterval(deleteIntervalRef.current);
+                deleteIntervalRef.current = null;
+            }
+        }, 1000);
+    };
+
+    /* CONFIRM DELETE */
+    const handleConfirmDelete = async () => {
+        if (!deleteUid) return;
+
+        await axios.post('/api/check-nfc', {
+            nfcData: deleteUid
+        });
+
+        setDeleteUid(null);
+        setShowDeleteStudent(false);
+        fetchHistory();
     };
 
     return (
@@ -168,18 +199,68 @@ const Dashboard = () => {
                         </div>
                     </div>
 
-                    {/* ADD STUDENT */}
-                    <div className="glass panel center">
-                        <div className="big-plus">➕</div>
-                        <h4>Yeni Tələbə</h4>
-                        <button className="btn full" onClick={() => setShowAddStudent(true)}>
-                            Tələbə əlavə et
-                        </button>
+                    {/* SPLIT PANEL */}
+                    <div
+                        className="glass panel center"
+                        style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch' }}
+                    >
+
+                        {/* LEFT */}
+                        <div
+                            style={{
+                                flex: 1,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center'
+                            }}
+                        >
+                            <div>
+                                <div className="big-plus">➕</div>
+                                <h4>Yeni Tələbə</h4>
+                            </div>
+
+                            <div style={{ flex: 1 }} />
+
+                            <button
+                                className="btn full"
+                                onClick={() => setShowAddStudent(true)}
+                            >
+                                Əlavə et
+                            </button>
+                        </div>
+
+                        {/* DIVIDER */}
+                        <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+
+                        {/* RIGHT */}
+                        <div
+                            style={{
+                                flex: 1,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center'
+                            }}
+                        >
+                            <div>
+                                <div style={{ fontSize: '2.2rem' }}>🗑️</div>
+                                <h4>Tələbə Sil</h4>
+                            </div>
+
+                            <div style={{ flex: 1 }} />
+
+                            <button
+                                className="btn full"
+                                style={{ background: 'var(--error)' }}
+                                onClick={() => setShowDeleteStudent(true)}
+                            >
+                                Sil
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* MODAL */}
+            {/* ADD MODAL */}
             {showAddStudent && (
                 <div className="modal-backdrop" onClick={() => setShowAddStudent(false)}>
                     <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
@@ -219,6 +300,56 @@ const Dashboard = () => {
                                 <button
                                     className="btn cancel"
                                     onClick={() => setShowAddStudent(false)}
+                                >
+                                    Ləğv et
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* DELETE MODAL */}
+            {showDeleteStudent && (
+                <div className="modal-backdrop" onClick={() => setShowDeleteStudent(false)}>
+                    <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+                        <h3>🗑️ Tələbə Sil</h3>
+                        <p className="modal-desc">NFC kartını oxut</p>
+
+                        <div className="modal-body">
+                            <button
+                                className={`btn full ${isDeletingNfc ? 'nfc-reading' : ''}`}
+                                style={{ background: 'var(--error)' }}
+                                onClick={handleDeleteReadNfc}
+                            >
+                                {isDeletingNfc ? '⏹️ Dayandır' : '📡 NFC Kart Oxut'}
+                            </button>
+
+                            {deleteUid && (
+                                <div className="uid-box">
+                                    🆔 Oxunan UID: <b>{deleteUid}</b>
+                                </div>
+                            )}
+
+                            <div className="modal-actions">
+                                <button
+                                    className="btn danger"
+                                    disabled={!deleteUid}
+                                    onClick={handleConfirmDelete}
+                                >
+                                    🗑️ Kaydet
+                                </button>
+                                <button
+                                    className="btn cancel"
+                                    onClick={() => {
+                                        if (deleteIntervalRef.current) {
+                                            clearInterval(deleteIntervalRef.current);
+                                            deleteIntervalRef.current = null;
+                                        }
+                                        setDeleteUid(null);
+                                        setIsDeletingNfc(false);
+                                        setShowDeleteStudent(false);
+                                    }}
                                 >
                                     Ləğv et
                                 </button>
