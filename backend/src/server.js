@@ -31,20 +31,17 @@ app.post('/api/login', (req, res) => {
 
 /* ================= NFC STATE ================= */
 let scanHistory = [];
-let waitingForNfc = false;        // öğrenci ekleme
-let deleteReadMode = false;      // silme için NFC okuma
-let lastNfcUid = null;
-let pendingDeleteUid = null;     // silme bekleyen UID
 
-/* ================= DEBUG ================= */
-app.post('/api/_debug/post-test', (req, res) => {
-    res.json({ ok: true, body: req.body });
-});
+let waitingForAdd = false;        // ekleme NFC modu
+let waitingForDelete = false;     // silme NFC okuma modu
+
+let lastNfcUid = null;            // frontend polling için
+let pendingDeleteUid = null;      // silme onayı bekleyen UID
 
 /* ================= NFC START (EKLEME) ================= */
 app.post('/api/nfc/start-wait', (req, res) => {
-    waitingForNfc = true;
-    deleteReadMode = false;
+    waitingForAdd = true;
+    waitingForDelete = false;
     lastNfcUid = null;
 
     console.log('📡 NFC EKLEME modu aktif');
@@ -53,8 +50,8 @@ app.post('/api/nfc/start-wait', (req, res) => {
 
 /* ================= NFC START (SİLME OKUMA) ================= */
 app.post('/api/nfc/start-delete', (req, res) => {
-    deleteReadMode = true;
-    waitingForNfc = false;
+    waitingForDelete = true;
+    waitingForAdd = false;
     lastNfcUid = null;
     pendingDeleteUid = null;
 
@@ -62,32 +59,32 @@ app.post('/api/nfc/start-delete', (req, res) => {
     res.json({ success: true });
 });
 
-/* ================= NFC CHECK ================= */
+/* ================= NFC CHECK (GSM / SIM868) ================= */
 app.post('/api/check-nfc', async (req, res) => {
     const { nfcData } = req.body;
     if (!nfcData) {
         return res.status(400).json({ found: false, message: 'NFC yok' });
     }
 
-    /* ======== EKLEME MODU ======== */
-    if (waitingForNfc) {
+    /* ===== EKLEME MODU ===== */
+    if (waitingForAdd) {
+        waitingForAdd = false;
         lastNfcUid = nfcData;
-        waitingForNfc = false;
 
         console.log('🆕 UID alındı (ekleme):', nfcData);
 
         return res.json({
             found: true,
             uid: nfcData,
-            message: 'UID qəbul edildi'
+            message: 'UID alındı'
         });
     }
 
-    /* ======== SİLME OKUMA MODU (SADECE OKU) ======== */
-    if (deleteReadMode) {
-        pendingDeleteUid = nfcData;
+    /* ===== SİLME OKUMA MODU (SADECE OKU) ===== */
+    if (waitingForDelete) {
+        waitingForDelete = false;
         lastNfcUid = nfcData;
-        deleteReadMode = false;
+        pendingDeleteUid = nfcData;
 
         console.log('🟡 Silme için UID alındı:', nfcData);
 
@@ -98,7 +95,7 @@ app.post('/api/check-nfc', async (req, res) => {
         });
     }
 
-    /* ======== NORMAL YOKLAMA ======== */
+    /* ===== NORMAL YOKLAMA ===== */
     try {
         const student = await Student.findOne({ nfcData });
 
@@ -153,12 +150,14 @@ app.post('/api/students', async (req, res) => {
 /* ================= CONFIRM DELETE ================= */
 app.post('/api/students/delete', async (req, res) => {
     const { nfcUid } = req.body;
+
     if (!nfcUid || nfcUid !== pendingDeleteUid) {
-        return res.status(400).json({ message: 'Yanlış və ya etibarsız UID' });
+        return res.status(400).json({ message: 'Etibarsız silmə tələbi' });
     }
 
     try {
         const deleted = await Student.findOneAndDelete({ nfcData: nfcUid });
+
         pendingDeleteUid = null;
         lastNfcUid = null;
 
