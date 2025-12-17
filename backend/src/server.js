@@ -82,12 +82,12 @@ app.post('/api/check-nfc', async (req, res) => {
         waitingForDelete = false;
         lastNfcUid = nfcData;
 
-        console.log('🟡 Silme için UID alındı:', nfcData);
+        console.log('🟡 Silme ucun UID alindi:', nfcData);
 
         return res.json({
             found: true,
             uid: nfcData,
-            message: 'Silme üçün UID alındı'
+            message: 'Silme ucun UID alindi'
         });
     }
 
@@ -97,7 +97,7 @@ app.post('/api/check-nfc', async (req, res) => {
 
         const response = student
             ? { found: true, message: `${student.name} dərsdə` }
-            : { found: false, message: 'Bilinməyən kart' };
+            : { found: false, message: 'Bilinmeyen kart' };
 
         scanHistory.unshift({ ...response, timestamp: new Date() });
         if (scanHistory.length > 50) scanHistory.pop();
@@ -118,13 +118,13 @@ app.get('/api/nfc/latest', (req, res) => {
 app.post('/api/students', async (req, res) => {
     const { name, nfcUid } = req.body;
     if (!name || !nfcUid) {
-        return res.status(400).json({ message: 'Əksik bilgi' });
+        return res.status(400).json({ message: 'EKSIK BILGI' });
     }
 
     try {
         const exists = await Student.findOne({ nfcData: nfcUid });
         if (exists) {
-            return res.status(409).json({ message: 'Bu NFC artıq qeydiyyatlıdır' });
+            return res.status(409).json({ message: 'Bu NFC ARTIQ QEYDIYYATDADIR' });
         }
 
         await new Student({
@@ -158,7 +158,7 @@ app.post('/api/students/delete', async (req, res) => {
 
         if (!deleted) {
             console.log('❌ DB-də tapılmadı:', nfcUid);
-            return res.status(404).json({ message: 'Tələbə tapılmadı' });
+            return res.status(404).json({ message: 'TELEBE TAPILMADI' });
         }
 
         console.log('🗑️ Tələbə silindi:', deleted.name);
@@ -166,7 +166,7 @@ app.post('/api/students/delete', async (req, res) => {
 
     } catch (err) {
         console.error('❌ DELETE ERROR:', err);
-        res.status(500).json({ message: 'Silme xətası' });
+        res.status(500).json({ message: 'Silme xetası' });
     }
 });
 
