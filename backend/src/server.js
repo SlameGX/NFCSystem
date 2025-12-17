@@ -15,9 +15,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// ⬇️ BU ÇOK ÖNEMLİ (preflight fix)
-app.options('*', cors());
-
 /* ================= DB BAGLANTI ================= */
 const FORCE_OFFLINE = false;
 
@@ -57,7 +54,6 @@ app.post('/api/nfc/start-wait', (req, res) => {
 
     console.log('📡 NFC BEKLEME MODU AKTİF');
 
-    // ⚠️ HIZLI & NET CEVAP
     res.status(200).json({
         success: true,
         waitingForNfc: true
@@ -75,7 +71,7 @@ app.post('/api/check-nfc', async (req, res) => {
     if (waitingForNfc) {
         lastNfcUid = nfcData;
 
-        console.log('🆕 Öğrenci ekleme için NFC alındı:', nfcData);
+        console.log('🆕 Öğrenci ekleme üçün NFC alındı:', nfcData);
 
         return res.json({
             found: true,
@@ -89,7 +85,6 @@ app.post('/api/check-nfc', async (req, res) => {
     let responseData;
 
     if (mongoose.connection.readyState !== 1) {
-        // OFFLINE
         if (nfcData === "0x00 0x00") {
             responseData = {
                 found: true,
@@ -104,7 +99,6 @@ app.post('/api/check-nfc', async (req, res) => {
             };
         }
     } else {
-        // ONLINE
         try {
             const student = await Student.findOne({ nfcUid: nfcData });
 
@@ -159,7 +153,7 @@ app.post('/api/students', async (req, res) => {
 
         await student.save();
 
-        // STATE RESET
+        // RESET
         waitingForNfc = false;
         lastNfcUid = null;
 
