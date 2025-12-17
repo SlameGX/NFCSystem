@@ -43,7 +43,7 @@ app.post('/api/_debug/post-test', (req, res) => {
 app.post('/api/nfc/start-wait', (req, res) => {
     waitingForNfc = true;
     lastNfcUid = null;
-    console.log('📡 NFC BEKLEME MODU AKTİF');
+    console.log('📡 NFC Gözləmə modu aktiv');
     res.json({ success: true });
 });
 
@@ -60,7 +60,7 @@ app.post('/api/check-nfc', async (req, res) => {
         return res.json({
             found: true,
             uid: nfcData,
-            message: 'UID alındı (öğrenci ekleme)',
+            message: 'UID qebul edildi',
             timestamp: new Date()
         });
     }
@@ -70,8 +70,8 @@ app.post('/api/check-nfc', async (req, res) => {
         const student = await Student.findOne({ nfcData });
 
         const response = student
-            ? { found: true, message: `${student.name} derste` }
-            : { found: false, message: 'Tanımsız kart' };
+            ? { found: true, message: `${student.name} dərstə` }
+            : { found: false, message: 'Bilinməyən kart' };
 
         scanHistory.unshift({ ...response, timestamp: new Date() });
         if (scanHistory.length > 50) scanHistory.pop();
@@ -91,12 +91,12 @@ app.get('/api/nfc/latest', (req, res) => {
 /* ================= ADD STUDENT (Dashboard Kaydet) ================= */
 app.post('/api/students', async (req, res) => {
     const { name, nfcUid } = req.body;
-    if (!name || !nfcUid) return res.status(400).json({ message: 'Eksik bilgi' });
+    if (!name || !nfcUid) return res.status(400).json({ message: 'Əksik bilgi' });
 
     try {
         // Model alanı nfcData => nfcUid'i nfcData olarak kaydedeceğiz
         const exists = await Student.findOne({ nfcData: nfcUid });
-        if (exists) return res.status(409).json({ message: 'Bu NFC zaten kayıtlı' });
+        if (exists) return res.status(409).json({ message: 'Bu NFC artiq qeydiyyatlidir' });
 
         await new Student({
             name: name,
@@ -107,15 +107,15 @@ app.post('/api/students', async (req, res) => {
         waitingForNfc = false;
         lastNfcUid = null;
 
-        console.log('✅ Yeni öğrenci eklendi:', name, nfcUid);
+        console.log('✅ Yeni telebe elave olundu:', name, nfcUid);
         res.json({ success: true });
     } catch (err) {
         console.error('❌ STUDENT SAVE ERROR:', err);
         // unique hatasını net verelim
         if (err?.code === 11000) {
-            return res.status(409).json({ message: 'Bu NFC zaten kayıtlı' });
+            return res.status(409).json({ message: 'Bu NFC artıq qeydiyyatlıdır' });
         }
-        res.status(500).json({ message: 'Kayıt xətası' });
+        res.status(500).json({ message: 'Qeydiyyat xətası' });
     }
 });
 
