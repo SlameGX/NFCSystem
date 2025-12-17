@@ -8,8 +8,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 /* ================= MIDDLEWARE ================= */
-app.use(cors());
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
+
+// ⬇️ BU ÇOK ÖNEMLİ (preflight fix)
+app.options('*', cors());
 
 /* ================= DB BAGLANTI ================= */
 const FORCE_OFFLINE = false;
@@ -19,8 +26,9 @@ if (!FORCE_OFFLINE) {
         'mongodb://nfcuser:StrongPassword123@127.0.0.1:27017/nfcAttendanceDB?authSource=nfcAttendanceDB'
     ).then(() => {
         console.log('MongoDB qoşuldu');
-    }).catch(() => {
+    }).catch((err) => {
         console.log('MongoDB xətası – Offline moda keçildi');
+        console.error(err.message);
     });
 } else {
     console.log('OFFLINE MOD AKTİV');
@@ -49,13 +57,19 @@ app.post('/api/nfc/start-wait', (req, res) => {
 
     console.log('📡 NFC BEKLEME MODU AKTİF');
 
-    res.json({ success: true });
+    // ⚠️ HIZLI & NET CEVAP
+    res.status(200).json({
+        success: true,
+        waitingForNfc: true
+    });
 });
 
 /* ================= NFC CHECK ================= */
 app.post('/api/check-nfc', async (req, res) => {
     const { nfcData } = req.body;
-    if (!nfcData) return res.status(400).json({ found: false });
+    if (!nfcData) {
+        return res.status(400).json({ found: false, message: 'NFC verisi yok' });
+    }
 
     // 👉 ÖĞRENCİ EKLEME MODU
     if (waitingForNfc) {
@@ -65,7 +79,6 @@ app.post('/api/check-nfc', async (req, res) => {
 
         return res.json({
             found: true,
-            name: null,
             message: 'NFC UID alındı (öğrenci ekleme)',
             uid: nfcData,
             timestamp: new Date()
@@ -75,8 +88,8 @@ app.post('/api/check-nfc', async (req, res) => {
     /* ===== NORMAL YOKLAMA ===== */
     let responseData;
 
-    // OFFLINE
     if (mongoose.connection.readyState !== 1) {
+        // OFFLINE
         if (nfcData === "0x00 0x00") {
             responseData = {
                 found: true,
@@ -90,9 +103,8 @@ app.post('/api/check-nfc', async (req, res) => {
                 timestamp: new Date()
             };
         }
-    }
-    // ONLINE
-    else {
+    } else {
+        // ONLINE
         try {
             const student = await Student.findOne({ nfcUid: nfcData });
 
@@ -110,6 +122,7 @@ app.post('/api/check-nfc', async (req, res) => {
                 };
             }
         } catch (err) {
+            console.error(err);
             return res.status(500).json({ found: false });
         }
     }
@@ -154,6 +167,7 @@ app.post('/api/students', async (req, res) => {
 
         res.json({ success: true });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'DB xətası' });
     }
 });
