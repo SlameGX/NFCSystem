@@ -70,8 +70,8 @@ app.post('/api/check-nfc', async (req, res) => {
         const student = await Student.findOne({ nfcData });
 
         const response = student
-            ? { found: true, message: `${student.name} dərstə` }
-            : { found: false, message: 'Bilinməyən kart' };
+            ? { found: true, message: `${student.name} dərsdə` }
+            : { found: false, message: 'Bilinmeyen kart' };
 
         scanHistory.unshift({ ...response, timestamp: new Date() });
         if (scanHistory.length > 50) scanHistory.pop();
