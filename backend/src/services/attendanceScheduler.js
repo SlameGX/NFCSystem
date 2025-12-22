@@ -4,10 +4,13 @@ const Attendance = require('../models/Attendance');
 const SystemSettings = require('../models/SystemSettings');
 
 // Default lesson time if not set
-const DEFAULT_START_TIME = '05:54';
+const DEFAULT_START_TIME = '17:57:';
+
+// Helper for Baku Time
+const getBakuDate = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Baku' }));
 
 const getTodayDateString = () => {
-    const d = new Date();
+    const d = getBakuDate();
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -15,31 +18,30 @@ const getTodayDateString = () => {
 };
 
 const checkAttendance = async () => {
-    console.log('⏰ Running daily attendance check...');
+    console.log('⏰ Running daily attendance check (Baku Time)...');
 
     try {
         // 1. Get Lesson Start Time
         const settings = await SystemSettings.findOne({ key: 'lessonInfo' });
         const startTime = settings?.value?.lessonStartTime || DEFAULT_START_TIME;
 
-        // 2. Check if current time is past start time
-        const now = new Date();
-        const currentHours = now.getHours();
-        const currentMinutes = now.getMinutes();
+        // 2. Check if current BAKU time is past start time
+        const nowBaku = getBakuDate();
+        const currentHours = nowBaku.getHours();
+        const currentMinutes = nowBaku.getMinutes();
         const currentTimeVal = currentHours * 60 + currentMinutes;
 
         const [startHours, startMinutes] = startTime.split(':').map(Number);
         const startTimeVal = startHours * 60 + startMinutes;
 
-        // If current time is LESS than start time, do nothing (wait for lesson to start)
+        // If current time is LESS than start time, do nothing
         if (currentTimeVal < startTimeVal) {
-            console.log(`⏳ Too early for attendance check. Current: ${currentHours}:${currentMinutes}, Start: ${startTime}`);
+            console.log(`⏳ Too early. Current (Baku): ${String(currentHours).padStart(2, '0')}:${String(currentMinutes).padStart(2, '0')}, Start: ${startTime}`);
             return;
         }
 
-        const todayStr = getTodayDateString();
-        // Format time as HH:mm
-        const timeStr = `${String(currentHours).padStart(2, '0')}:${String(currentMinutes).padStart(2, '0')}`;
+        const todayStr = getTodayDateString(); // Baku date
+        const timeStr = `${String(currentHours).padStart(2, '0')}:${String(currentMinutes).padStart(2, '0')}`; // Baku time
 
         // 3. Find all students
         const allStudents = await Student.find({});

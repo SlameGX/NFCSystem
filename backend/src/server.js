@@ -185,13 +185,17 @@ app.post('/api/check-nfc', async (req, res) => {
         const student = await Student.findOne({ nfcData });
 
         if (student) {
-            // --- ATTENDANCE LOGIC ---
-            const d = new Date();
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
+            // --- ATTENDANCE LOGIC (BAKU TIME) ---
+            // Create a date object that represents Baku time
+            const now = new Date();
+            const bakuDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Baku' }));
+
+            const year = bakuDate.getFullYear();
+            const month = String(bakuDate.getMonth() + 1).padStart(2, '0');
+            const day = String(bakuDate.getDate()).padStart(2, '0');
             const todayStr = `${year}-${month}-${day}`;
-            const timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+            const timeStr = `${String(bakuDate.getHours()).padStart(2, '0')}:${String(bakuDate.getMinutes()).padStart(2, '0')}`;
 
             let attRecord = await Attendance.findOne({ studentId: student._id, date: todayStr });
 
@@ -203,17 +207,17 @@ app.post('/api/check-nfc', async (req, res) => {
                     studentId: student._id,
                     nfcUid: nfcData,
                     date: todayStr,
-                    time: timeStr,   // NEW: Save HH:mm
+                    time: timeStr,   // Baku Time HH:mm
                     status: 'present',
-                    scanTime: new Date(),
+                    scanTime: now,   // Actual UTC timestamp
                     autoMarked: false
                 });
             } else if (attRecord.status === 'absent') {
                 // Was marked absent -> Change to Late
                 attRecord.status = 'late';
-                attRecord.scanTime = new Date();
-                attRecord.time = timeStr; // Update time to actual scan time
-                attRecord.autoMarked = false; // Override auto mark
+                attRecord.scanTime = now;
+                attRecord.time = timeStr; // Update to actual Baku scan time
+                attRecord.autoMarked = false;
                 await attRecord.save();
                 statusMessage = 'Gecikdi';
             } else {
@@ -227,7 +231,7 @@ app.post('/api/check-nfc', async (req, res) => {
                 name: student.name
             };
 
-            scanHistory.unshift({ ...response, timestamp: new Date() });
+            scanHistory.unshift({ ...response, timestamp: now });
             if (scanHistory.length > 50) scanHistory.pop();
 
             return res.json(response);
