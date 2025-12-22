@@ -7,6 +7,12 @@ const Dashboard = () => {
     const [showAddStudent, setShowAddStudent] = useState(false);
     const [showDeleteStudent, setShowDeleteStudent] = useState(false);
 
+    // Attendance & Settings
+    const [lessonStartTime, setLessonStartTime] = useState('09:00');
+    const [lessonEndTime, setLessonEndTime] = useState('10:00');
+    const [dailyAttendance, setDailyAttendance] = useState([]);
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
     const [studentName, setStudentName] = useState('');
     const [courseGroup, setCourseGroup] = useState(''); // NEW
     const [username, setUsername] = useState('');
@@ -20,21 +26,37 @@ const Dashboard = () => {
     const [nfcMode, setNfcMode] = useState(null);
 
     useEffect(() => {
-        const fetchHistory = async () => {
+        const fetchInitialData = async () => {
+            // 1. History
             try {
-                // ✅ backend: /api/scan-history
                 const res = await axios.get('/api/scan-history');
-                if (Array.isArray(res.data)) {
-                    setScanHistory(res.data);
-                }
-            } catch (err) {
-                console.error('History fetch error:', err);
-            }
+                if (Array.isArray(res.data)) setScanHistory(res.data);
+            } catch { }
+
+            // 2. Settings
+            try {
+                const res = await axios.get('/api/settings/lesson-time');
+                setLessonStartTime(res.data.lessonStartTime);
+                setLessonEndTime(res.data.lessonEndTime);
+            } catch { }
+
+            // 3. Daily Attendance
+            fetchDailyAttendance(selectedDate);
         };
-        fetchHistory();
-        const interval = setInterval(fetchHistory, 3000);
+
+        fetchInitialData();
+        const interval = setInterval(() => {
+            fetchInitialData();
+        }, 3000);
         return () => clearInterval(interval);
-    }, []);
+    }, [selectedDate]);
+
+    const fetchDailyAttendance = async (date) => {
+        try {
+            const res = await axios.get(`/api/attendance/daily?date=${date}`);
+            setDailyAttendance(res.data);
+        } catch { }
+    };
 
     const handleSimulation = async (uid) => {
         try {
@@ -132,6 +154,18 @@ const Dashboard = () => {
         navigate('/login');
     };
 
+    const handleSaveSettings = async () => {
+        try {
+            await axios.post('/api/settings/lesson-time', {
+                startTime: lessonStartTime,
+                endTime: lessonEndTime
+            });
+            alert('Ayarlar yadda saxlanıldı! ✅');
+        } catch {
+            alert('Xəta baş verdi');
+        }
+    };
+
     return (
         <div className="container animate-fade-in" style={{ opacity: 1, visibility: 'visible', display: 'block' }}>
             {/* NAVBAR */}
@@ -143,7 +177,7 @@ const Dashboard = () => {
                 </div>
             </nav>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '3rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '3rem', marginBottom: '3rem' }}>
                 {/* LEFT: HISTORY */}
                 <div className="glass" style={{ padding: '2.5rem', borderRadius: '32px', height: '700px', display: 'flex', flexDirection: 'column' }}>
                     <h2 style={{ fontSize: '1.8rem', fontWeight: 600, marginBottom: '2.5rem' }}>Son Oxunan Kartlar</h2>
@@ -186,6 +220,103 @@ const Dashboard = () => {
                             <button className="btn" onClick={() => { setShowAddStudent(true); setNfcMode('add'); }} style={{ padding: '1.5rem', borderRadius: '20px', justifyContent: 'flex-start', background: 'rgba(0, 243, 255, 0.05)', border: '1px solid var(--primary)', color: 'white' }}>➕ Yeni Tələbə Əlavə Et</button>
                             <button className="btn" onClick={() => { setShowDeleteStudent(true); setNfcMode('delete'); }} style={{ padding: '1.5rem', borderRadius: '20px', justifyContent: 'flex-start', background: 'rgba(255, 49, 49, 0.05)', border: '1px solid var(--error)', color: 'white' }}>🗑️ Tələbəni Sistemdən Sil</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* NEW ROW: ATTENDANCE & SETTINGS */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '3rem' }}>
+
+                {/* DAILY ATTENDANCE LIST */}
+                <div className="glass" style={{ padding: '2.5rem', borderRadius: '32px', minHeight: '500px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                        <h3 style={{ fontSize: '1.6rem', margin: 0 }}>📅 Gündəlik Yoxlama</h3>
+                        <input
+                            type="date"
+                            className="input-field"
+                            style={{ width: 'auto' }}
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                        />
+                    </div>
+
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', textAlign: 'left' }}>
+                                    <th style={{ padding: '1rem' }}>Tələbə</th>
+                                    <th style={{ padding: '1rem' }}>Qrup</th>
+                                    <th style={{ padding: '1rem' }}>Status</th>
+                                    <th style={{ padding: '1rem' }}>Saat</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {dailyAttendance.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="4" style={{ padding: '2rem', textAlign: 'center', opacity: 0.5 }}>Bu tarix üçün məlumat yoxdur.</td>
+                                    </tr>
+                                ) : (
+                                    dailyAttendance.map((record, i) => (
+                                        <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <td style={{ padding: '1rem' }}>{record.studentName || record.studentId?.name}</td>
+                                            <td style={{ padding: '1rem' }}>{record.courseGroup || '-'}</td>
+                                            <td style={{ padding: '1rem' }}>
+                                                <span style={{
+                                                    padding: '0.4rem 1rem',
+                                                    borderRadius: '12px',
+                                                    background: record.status === 'present' ? 'rgba(57, 255, 20, 0.1)' :
+                                                        record.status === 'late' ? 'rgba(255, 165, 0, 0.1)' : 'rgba(255, 49, 49, 0.1)',
+                                                    color: record.status === 'present' ? 'var(--success)' :
+                                                        record.status === 'late' ? 'orange' : 'var(--error)',
+                                                    fontWeight: 600
+                                                }}>
+                                                    {record.status === 'present' ? 'Dərsdə' :
+                                                        record.status === 'late' ? 'Gecikib' : 'Qayıb'}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '1rem', opacity: 0.7 }}>
+                                                {record.scanTime ? new Date(record.scanTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* SETTINGS PANEL */}
+                <div className="glass" style={{ padding: '2.5rem', borderRadius: '32px', height: 'fit-content' }}>
+                    <h3 style={{ marginBottom: '2rem', color: 'var(--primary)', fontSize: '1.4rem' }}>⚙️ Dərs Saatları</h3>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', opacity: 0.7 }}>Dərs Başlama Saatı</label>
+                            <input
+                                type="time"
+                                className="input-field"
+                                value={lessonStartTime}
+                                onChange={(e) => setLessonStartTime(e.target.value)}
+                            />
+                        </div>
+
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', opacity: 0.7 }}>Dərs Bitmə Saatı</label>
+                            <input
+                                type="time"
+                                className="input-field"
+                                value={lessonEndTime}
+                                onChange={(e) => setLessonEndTime(e.target.value)}
+                            />
+                        </div>
+
+                        <button className="btn" onClick={handleSaveSettings} style={{ marginTop: '1rem' }}>
+                            💾 Yadda Saxla
+                        </button>
+                    </div>
+
+                    <div style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', fontSize: '0.9rem', opacity: 0.8 }}>
+                        ℹ️ Sistem avtomatik olaraq hər gün <b>{lessonStartTime}</b>-dan sonra dərsə gəlməyənləri "Qayıb" yazacaq.
                     </div>
                 </div>
             </div>

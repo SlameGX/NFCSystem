@@ -37,12 +37,18 @@ const StudentDashboard = () => {
 
     const fetchData = async (token) => {
         try {
+            // 1. Profile
             const res = await axios.get('/api/student/me', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const newHistory = res.data.history || [];
+            // 2. Attendance History
+            const resHistory = await axios.get('/api/attendance/my-history', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
 
-            // Əgər yeni bir giriş gəlibsə, qısa müddətli "Scanning" effekti yaradırıq
+            const newHistory = resHistory.data || [];
+
+            // Simple check for new scan (if count increases)
             if (newHistory.length > history.length && history.length > 0) {
                 setIsScanning(true);
                 setTimeout(() => setIsScanning(false), 3000);
@@ -63,6 +69,7 @@ const StudentDashboard = () => {
 
     return (
         <div className="container animate-fade-in" style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
+            {/* ... NAVBAR & STATUS (unchanged) ... */}
             {/* NAVBAR */}
             <nav className="nav glass" style={{ padding: '1.2rem 2.5rem', borderRadius: '20px', marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="logo" style={{ fontSize: '1.8rem', fontWeight: 800 }}>EduPass</div>
@@ -72,7 +79,7 @@ const StudentDashboard = () => {
                 </div>
             </nav>
 
-            {/* BIG STATUS DISPLAY (Initial design style where name appears vividly) */}
+            {/* BIG STATUS DISPLAY */}
             <div className={`glass ${isScanning ? 'nfc-reading' : ''}`} style={{
                 padding: '4rem 2rem',
                 textAlign: 'center',
@@ -115,7 +122,7 @@ const StudentDashboard = () => {
                 {/* RECENT ACTIVITY PANEL */}
                 <div className="glass" style={{ padding: '2.5rem', borderRadius: '32px', height: '500px', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                        <h3 style={{ margin: 0, fontSize: '1.4rem' }}>Son Girişlər</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.4rem' }}>Giriş Tarixçəsi</h3>
                         <div className="neon-text-success" style={{ fontSize: '0.85rem', fontWeight: 700 }}>CANLI 📡</div>
                     </div>
 
@@ -124,28 +131,35 @@ const StudentDashboard = () => {
                             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.3, fontSize: '1rem' }}>Heç bir qeyd yoxdur</div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                {[...history].reverse().map((scan, index) => (
+                                {[...history].map((scan, index) => (
                                     <div key={index} className="glass" style={{
                                         padding: '1.2rem',
                                         borderRadius: '18px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '1.5rem',
-                                        background: 'rgba(255,255,255,0.01)',
+                                        background: scan.status === 'present' ? 'rgba(57, 255, 20, 0.02)' :
+                                            scan.status === 'late' ? 'rgba(255, 165, 0, 0.02)' : 'rgba(255, 49, 49, 0.02)',
                                         border: '1px solid rgba(255,255,255,0.05)'
                                     }}>
                                         <div style={{
                                             width: '40px', height: '40px', borderRadius: '12px',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            background: 'rgba(57, 255, 20, 0.1)', color: 'var(--success)',
+                                            background: scan.status === 'present' ? 'rgba(57, 255, 20, 0.1)' :
+                                                scan.status === 'late' ? 'rgba(255, 165, 0, 0.1)' : 'rgba(255, 49, 49, 0.1)',
+                                            color: scan.status === 'present' ? 'var(--success)' :
+                                                scan.status === 'late' ? 'orange' : 'var(--error)',
                                             fontSize: '1rem'
-                                        }}>✓</div>
+                                        }}>{scan.status === 'present' ? '✓' : scan.status === 'late' ? '⚠️' : '✕'}</div>
+
                                         <div style={{ flex: 1 }}>
-                                            <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>Sistemə Giriş</div>
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Məkan: Əsas Giriş</div>
+                                            <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+                                                {scan.status === 'present' ? 'Dərsdə' : scan.status === 'late' ? 'Gecikib' : 'Qayıb'}
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{scan.date}</div>
                                         </div>
                                         <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>
-                                            {new Date(scan.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            {scan.scanTime ? new Date(scan.scanTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
                                         </div>
                                     </div>
                                 ))}

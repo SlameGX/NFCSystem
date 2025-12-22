@@ -6,6 +6,9 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Student = require('./models/Student');
 const StudentAuth = require('./models/StudentAuth');
+const Attendance = require('./models/Attendance');
+const SystemSettings = require('./models/SystemSettings');
+const { startScheduler } = require('./services/attendanceScheduler');
 
 const app = express();
 const PORT = 5000;
@@ -14,6 +17,9 @@ const JWT_SECRET = 'supersecretkey123'; // Productionda .env'den alınmalı
 /* ================= MIDDLEWARE ================= */
 app.use(cors());
 app.use(express.json());
+
+/* ================= SCHEDULER ================= */
+startScheduler();
 
 /* ================= DB ================= */
 mongoose.connect(
@@ -178,14 +184,57 @@ app.post('/api/check-nfc', async (req, res) => {
     try {
         const student = await Student.findOne({ nfcData });
 
-        const response = student
-            ? { found: true, message: `${student.name} dərsdə`, uid: nfcData, name: student.name }
-            : { found: false, message: 'Bilinmeyen kart', uid: nfcData };
+        if (student) {
+            // --- ATTENDANCE LOGIC ---
+            const d = new Date();
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const todayStr = `${year}-${month}-${day}`;
 
+            let attRecord = await Attendance.findOne({ studentId: student._id, date: todayStr });
+
+            let statusMessage = 'Vaxtında';
+
+            if (!attRecord) {
+                // First scan -> Present
+                attRecord = await Attendance.create({
+                    studentId: student._id,
+                    nfcUid: nfcData,
+                    date: todayStr,
+                    status: 'present',
+                    scanTime: new Date()
+                });
+            } else if (attRecord.status === 'absent') {
+                // Was marked absent -> Change to Late
+                attRecord.status = 'late';
+                attRecord.scanTime = new Date();
+                attRecord.autoMarked = false; // Override auto mark
+                await attRecord.save();
+                statusMessage = 'Gecikdi';
+            } else {
+                statusMessage = 'Artıq qeyd olunub';
+            }
+
+            const response = {
+                found: true,
+                message: `${student.name} dərsdə (${statusMessage})`,
+                uid: nfcData,
+                name: student.name
+            };
+
+            scanHistory.unshift({ ...response, timestamp: new Date() });
+            if (scanHistory.length > 50) scanHistory.pop();
+
+            return res.json(response);
+        }
+
+        // Unknown card
+        const response = { found: false, message: 'Bilinmeyen kart', uid: nfcData };
         scanHistory.unshift({ ...response, timestamp: new Date() });
         if (scanHistory.length > 50) scanHistory.pop();
-
         return res.json(response);
+
     } catch (err) {
         console.error('❌ CHECK NFC ERROR:', err);
         return res.status(500).json({ found: false, message: 'DB xətası' });
@@ -280,6 +329,72 @@ app.post('/api/students/delete', async (req, res) => {
     } catch (err) {
         console.error('❌ DELETE ERROR:', err);
         res.status(500).json({ message: 'Silme xetası' });
+    }
+});
+
+/* ================= ATTENDANCE ROUTES ================= */
+
+// 1. Get Daily Attendance (Admin)
+app.get('/api/attendance/daily', async (req, res) => {
+    const { date } = req.query; // YYYY-MM-DD
+    if (!date) return res.status(400).json({ message: 'Tarix lazımdır' });
+
+    try {
+        const records = await Attendance.find({ date }).populate('studentId', 'name');
+
+        // Enhance with courseGroup from StudentAuth
+        const enhancedRecords = await Promise.all(records.map(async (record) => {
+            // Check if studentId exists (it might be null if student deleted)
+            if (!record.studentId) return record;
+
+            const auth = await StudentAuth.findOne({ studentId: record.studentId._id });
+            return {
+                ...record.toObject(),
+                courseGroup: auth ? auth.courseGroup : '',
+                studentName: record.studentId.name // Flatten for easier frontend use
+            };
+        }));
+
+        res.json(enhancedRecords);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Xəta' });
+    }
+});
+
+// 2. Get My History (Student)
+app.get('/api/attendance/my-history', authenticateToken, async (req, res) => {
+    try {
+        // req.user.id is studentId (from StudentAuth)
+        // StudentAuth.studentId refers to Student._id
+        const records = await Attendance.find({ studentId: req.user.id }).sort({ date: -1 });
+        res.json(records);
+    } catch (err) {
+        res.status(500).json({ message: 'Xəta' });
+    }
+});
+
+/* ================= SETTINGS ROUTES ================= */
+app.post('/api/settings/lesson-time', async (req, res) => {
+    const { startTime, endTime } = req.body;
+    try {
+        await SystemSettings.findOneAndUpdate(
+            { key: 'lessonInfo' },
+            { value: { lessonStartTime: startTime, lessonEndTime: endTime } },
+            { upsert: true, new: true }
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ message: 'Ayarlar xətası' });
+    }
+});
+
+app.get('/api/settings/lesson-time', async (req, res) => {
+    try {
+        const settings = await SystemSettings.findOne({ key: 'lessonInfo' });
+        res.json(settings?.value || { lessonStartTime: '09:00', lessonEndTime: '10:00' });
+    } catch (err) {
+        res.status(500).json({ message: 'Xəta' });
     }
 });
 
