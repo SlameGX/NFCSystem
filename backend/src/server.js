@@ -146,6 +146,16 @@ app.post('/api/nfc/start-delete', (req, res) => {
     res.json({ success: true });
 });
 
+/* ================= NFC CANCEL ================= */
+app.post('/api/nfc/cancel', (req, res) => {
+    waitingForAdd = false;
+    waitingForDelete = false;
+    lastNfcUid = null;
+
+    console.log('🛑 NFC modu ləğv edildi (Durdurldu)');
+    res.json({ success: true });
+});
+
 /* ================= NFC CHECK (GSM / SIM868) ================= */
 app.post('/api/check-nfc', async (req, res) => {
     const { nfcData } = req.body;

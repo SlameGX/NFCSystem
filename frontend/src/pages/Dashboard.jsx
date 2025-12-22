@@ -100,49 +100,52 @@ const Dashboard = () => {
         }
     };
 
-    // ✅ Backend uyumlu NFC okuma:
-    // 1) Mode başlat: /api/nfc/start-wait veya /api/nfc/start-delete
-    // 2) /api/nfc/latest polling (1s)
+    // Updated NFC Read Handler with TOGGLE logic
     const startNfcRead = async () => {
-        setIsReadingNfc(true);
-        setNfcUid('');
-
-        try {
-            if (nfcMode === 'add') {
-                await axios.post('/api/nfc/start-wait');
-            } else if (nfcMode === 'delete') {
-                await axios.post('/api/nfc/start-delete');
-            } else {
-                // mode set edilmemişse güvenli fallback
-                await axios.post('/api/nfc/start-wait');
+        // If already reading, STOP it
+        if (isReadingNfc) {
+            try {
+                // We send a cancel request to backend
+                await axios.post('/api/nfc/cancel');
+                setIsReadingNfc(false);
+                setNfcUid(''); // Clear partial data
+            } catch (error) {
+                console.error('Stop error', error);
             }
+            return;
+        }
 
-            const startedAt = Date.now();
-            const interval = setInterval(async () => {
+        // Start reading
+        try {
+            setIsReadingNfc(true);
+            setNfcUid('');
+            const endpoint = nfcMode === 'add' ? '/api/nfc/start-wait' : '/api/nfc/start-delete';
+            await axios.post(endpoint);
+
+            // Polling for NFC data
+            const pollInterval = setInterval(async () => {
                 try {
-                    const res = await axios.get('/api/nfc/latest');
-                    const uid = res.data?.uid;
-
-                    if (uid) {
-                        setNfcUid(uid);
-                        setIsReadingNfc(false);
-                        clearInterval(interval);
+                    // Check if cancelled locally
+                    if (!isReadingNfc) {
+                        clearInterval(pollInterval);
+                        return;
                     }
 
-                    // 10 saniye timeout
-                    if (Date.now() - startedAt > 10000) {
+                    const res = await axios.get('/api/nfc/latest');
+                    if (res.data.uid) {
+                        setNfcUid(res.data.uid);
                         setIsReadingNfc(false);
-                        clearInterval(interval);
+                        clearInterval(pollInterval);
                     }
                 } catch (e) {
-                    setIsReadingNfc(false);
-                    clearInterval(interval);
+                    // ignore errors during poll
                 }
             }, 1000);
 
         } catch (err) {
-            console.error('NFC setup error:', err);
+            console.error(err);
             setIsReadingNfc(false);
+            alert('NFC Modu başladıla bilmədi');
         }
     };
 
@@ -409,18 +412,43 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* MODALS */}
+            {/* MODALS - FIXED CENTERED */}
             {showAddStudent && (
-                <div className="modal-backdrop" onClick={() => setShowAddStudent(false)}>
-                    <div className="glass" style={{ width: '500px', padding: '3rem', background: 'var(--bg-dark)', border: '1px solid var(--primary)' }} onClick={e => e.stopPropagation()}>
-                        <h2 style={{ marginBottom: '1.5rem' }}>➕ Yeni Tələbə</h2>
+                <div className="modal-backdrop" onClick={() => setShowAddStudent(false)}
+                    style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="glass"
+                        style={{
+                            width: '500px',
+                            padding: '3rem',
+                            background: 'var(--bg-dark)',
+                            border: '1px solid var(--primary)',
+                            boxShadow: '0 0 50px rgba(0, 243, 255, 0.2)',
+                            position: 'relative' // Centered by backdrop flex
+                        }}
+                        onClick={e => e.stopPropagation()}>
+
+                        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.8rem' }}>➕ Yeni Tələbə</h2>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                             <input className="input-field" placeholder="Ad Soyad" value={studentName} onChange={e => setStudentName(e.target.value)} />
                             <input className="input-field" placeholder="Kurs / Qrup" value={courseGroup} onChange={e => setCourseGroup(e.target.value)} />
                             <input className="input-field" placeholder="İstifadəçi Adı" value={username} onChange={e => setUsername(e.target.value)} />
                             <input className="input-field" type="password" placeholder="Şifrə" value={password} onChange={e => setPassword(e.target.value)} />
-                            <button className={`btn ${isReadingNfc ? 'nfc-reading' : ''}`} onClick={startNfcRead} style={{ height: '55px' }}>{isReadingNfc ? '📡 NFC Gözlənilir...' : '📡 NFC Oxut'}</button>
-                            {nfcUid && <div style={{ color: 'var(--success)', textAlign: 'center', fontWeight: 'bold', padding: '1rem', background: 'rgba(57, 255, 20, 0.1)', borderRadius: '12px' }}>✅ Oxunan UID: {nfcUid}</div>}
+
+                            {/* DYNAMIC NFC BUTTON */}
+                            <button
+                                className={`btn ${isReadingNfc ? 'nfc-reading' : ''}`}
+                                onClick={startNfcRead}
+                                style={{
+                                    height: '55px',
+                                    background: isReadingNfc ? 'linear-gradient(90deg, #ff9800, #f57c00)' : 'var(--primary)',
+                                    transition: 'all 0.3s ease'
+                                }}
+                            >
+                                {isReadingNfc ? '🛑 DURDUR' : '📡 NFC Oxut'}
+                            </button>
+
+                            {nfcUid && <div style={{ color: 'var(--success)', textAlign: 'center', fontWeight: 'bold', padding: '1rem', background: 'rgba(57, 255, 20, 0.1)', borderRadius: '12px', border: '1px solid rgba(57, 255, 20, 0.2)' }}>✅ Kart Oxundu: {nfcUid}</div>}
+
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                                 <button className="btn" style={{ flex: 1 }} onClick={handleSaveStudent} disabled={!studentName || !nfcUid}>Yadda Saxla</button>
                                 <button className="btn cancel" style={{ flex: 1 }} onClick={() => setShowAddStudent(false)}>Ləğv et</button>
@@ -431,13 +459,38 @@ const Dashboard = () => {
             )}
 
             {showDeleteStudent && (
-                <div className="modal-backdrop" onClick={() => setShowDeleteStudent(false)}>
-                    <div className="glass" style={{ width: '500px', padding: '3rem', background: 'var(--bg-dark)', border: '1px solid var(--error)' }} onClick={e => e.stopPropagation()}>
-                        <h2 style={{ marginBottom: '1.5rem' }}>🗑️ Tələbə Sil</h2>
+                <div className="modal-backdrop" onClick={() => setShowDeleteStudent(false)}
+                    style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="glass"
+                        style={{
+                            width: '500px',
+                            padding: '3rem',
+                            background: 'var(--bg-dark)',
+                            border: '1px solid var(--error)',
+                            boxShadow: '0 0 50px rgba(255, 49, 49, 0.2)',
+                            position: 'relative'
+                        }}
+                        onClick={e => e.stopPropagation()}>
+
+                        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.8rem' }}>🗑️ Tələbə Sil</h2>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-                            <p style={{ color: 'var(--text-muted)' }}>Silmək istədiyiniz tələbənin NFC kartını oxudun.</p>
-                            <button className={`btn ${isReadingNfc ? 'nfc-reading' : ''}`} style={{ background: 'var(--error)', height: '55px' }} onClick={startNfcRead}>{isReadingNfc ? '📡 NFC Gözlənilir...' : '📡 NFC Oxut'}</button>
-                            {nfcUid && <div style={{ color: 'var(--error)', textAlign: 'center', fontWeight: 'bold', padding: '1rem', background: 'rgba(255, 49, 49, 0.1)', borderRadius: '12px' }}>✅ Oxunan UID: {nfcUid}</div>}
+                            <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Silmək istədiyiniz tələbənin NFC kartını oxudun.</p>
+
+                            {/* DYNAMIC NFC BUTTON */}
+                            <button
+                                className={`btn ${isReadingNfc ? 'nfc-reading' : ''}`}
+                                style={{
+                                    background: isReadingNfc ? 'linear-gradient(90deg, #ff9800, #f57c00)' : 'var(--error)',
+                                    height: '55px',
+                                    transition: 'all 0.3s ease'
+                                }}
+                                onClick={startNfcRead}
+                            >
+                                {isReadingNfc ? '🛑 DURDUR' : '📡 NFC Oxut'}
+                            </button>
+
+                            {nfcUid && <div style={{ color: 'var(--error)', textAlign: 'center', fontWeight: 'bold', padding: '1rem', background: 'rgba(255, 49, 49, 0.1)', borderRadius: '12px', border: '1px solid rgba(255, 49, 49, 0.2)' }}>✅ Kart Oxundu: {nfcUid}</div>}
+
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                                 <button className="btn" style={{ flex: 1, background: 'var(--error)' }} onClick={handleDeleteStudent} disabled={!nfcUid}>Təsdiqlə və Sil</button>
                                 <button className="btn cancel" style={{ flex: 1 }} onClick={() => setShowDeleteStudent(false)}>Ləğv et</button>
