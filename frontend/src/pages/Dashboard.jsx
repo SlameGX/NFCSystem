@@ -418,8 +418,11 @@ const Dashboard = () => {
                     className="modal-backdrop"
                     onClick={() => setShowAddStudent(false)}
                     style={{
-                        position: 'fixed',
-                        inset: 0,
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
                         background: 'rgba(0,0,0,0.7)',
                         zIndex: 9999
                     }}
@@ -428,8 +431,8 @@ const Dashboard = () => {
                         className="glass"
                         onClick={e => e.stopPropagation()}
                         style={{
-                            position: 'fixed',
-                            top: '50%',
+                            position: 'absolute',
+                            top: '50vh',              // 🔥 DİNAMİK ORTA
                             left: '50%',
                             transform: 'translate(-50%, -50%)',
 
@@ -437,8 +440,7 @@ const Dashboard = () => {
                             padding: '3rem',
                             background: 'var(--bg-dark)',
                             border: '1px solid var(--primary)',
-                            boxShadow: '0 0 50px rgba(0,243,255,0.2)',
-                            zIndex: 10000
+                            boxShadow: '0 0 50px rgba(0,243,255,0.2)'
                         }}
                     >
                         <h2 style={{ marginBottom: '1.5rem', fontSize: '1.8rem' }}>
@@ -487,14 +489,18 @@ const Dashboard = () => {
                             )}
 
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                <button className="btn" style={{ flex: 1 }}
-                                        onClick={handleSaveStudent}
-                                        disabled={!studentName || !nfcUid}
+                                <button
+                                    className="btn"
+                                    style={{ flex: 1 }}
+                                    onClick={handleSaveStudent}
+                                    disabled={!studentName || !nfcUid}
                                 >
                                     Yadda Saxla
                                 </button>
-                                <button className="btn cancel" style={{ flex: 1 }}
-                                        onClick={() => setShowAddStudent(false)}
+                                <button
+                                    className="btn cancel"
+                                    style={{ flex: 1 }}
+                                    onClick={() => setShowAddStudent(false)}
                                 >
                                     Ləğv et
                                 </button>
@@ -505,13 +511,17 @@ const Dashboard = () => {
             )}
 
 
+
             {showDeleteStudent && (
                 <div
                     className="modal-backdrop"
                     onClick={() => setShowDeleteStudent(false)}
                     style={{
-                        position: 'fixed',
-                        inset: 0,
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
                         background: 'rgba(0,0,0,0.7)',
                         zIndex: 9999
                     }}
@@ -520,8 +530,8 @@ const Dashboard = () => {
                         className="glass"
                         onClick={e => e.stopPropagation()}
                         style={{
-                            position: 'fixed',
-                            top: '50%',
+                            position: 'absolute',
+                            top: '50vh',              // 🔥 DİNAMİK ORTA
                             left: '50%',
                             transform: 'translate(-50%, -50%)',
 
@@ -529,8 +539,7 @@ const Dashboard = () => {
                             padding: '3rem',
                             background: 'var(--bg-dark)',
                             border: '1px solid var(--error)',
-                            boxShadow: '0 0 50px rgba(255,49,49,0.2)',
-                            zIndex: 10000
+                            boxShadow: '0 0 50px rgba(255,49,49,0.2)'
                         }}
                     >
                         <h2 style={{ marginBottom: '1.5rem', fontSize: '1.8rem' }}>
@@ -566,14 +575,18 @@ const Dashboard = () => {
                         )}
 
                         <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                            <button className="btn" style={{ flex: 1, background: 'var(--error)' }}
-                                    onClick={handleDeleteStudent}
-                                    disabled={!nfcUid}
+                            <button
+                                className="btn"
+                                style={{ flex: 1, background: 'var(--error)' }}
+                                onClick={handleDeleteStudent}
+                                disabled={!nfcUid}
                             >
                                 Təsdiqlə və Sil
                             </button>
-                            <button className="btn cancel" style={{ flex: 1 }}
-                                    onClick={() => setShowDeleteStudent(false)}
+                            <button
+                                className="btn cancel"
+                                style={{ flex: 1 }}
+                                onClick={() => setShowDeleteStudent(false)}
                             >
                                 Ləğv et
                             </button>
@@ -581,6 +594,7 @@ const Dashboard = () => {
                     </div>
                 </div>
             )}
+
 
         </div>
     );
