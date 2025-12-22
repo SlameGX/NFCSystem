@@ -26,27 +26,30 @@ const Dashboard = () => {
     const [nfcMode, setNfcMode] = useState(null);
 
     useEffect(() => {
-        const fetchInitialData = async () => {
+        const fetchSettings = async () => {
+            try {
+                const res = await axios.get('/api/settings/lesson-time');
+                setLessonStartTime(res.data.lessonStartTime);
+                setLessonEndTime(res.data.lessonEndTime);
+            } catch { }
+        };
+
+        const fetchLiveData = async () => {
             // 1. History
             try {
                 const res = await axios.get('/api/scan-history');
                 if (Array.isArray(res.data)) setScanHistory(res.data);
             } catch { }
 
-            // 2. Settings
-            try {
-                const res = await axios.get('/api/settings/lesson-time');
-                setLessonStartTime(res.data.lessonStartTime);
-                setLessonEndTime(res.data.lessonEndTime);
-            } catch { }
-
-            // 3. Daily Attendance
+            // 2. Daily Attendance
             fetchDailyAttendance(selectedDate);
         };
 
-        fetchInitialData();
+        fetchSettings(); // Run once
+        fetchLiveData(); // Run once immediately
+
         const interval = setInterval(() => {
-            fetchInitialData();
+            fetchLiveData(); // Loop only live data
         }, 3000);
         return () => clearInterval(interval);
     }, [selectedDate]);
