@@ -197,29 +197,37 @@ app.post('/api/check-nfc', async (req, res) => {
 
             const timeStr = `${String(bakuDate.getHours()).padStart(2, '0')}:${String(bakuDate.getMinutes()).padStart(2, '0')}`;
 
+            // --- FETCH SETTINGS FOR TIME COMPARISON ---
+            const settings = await SystemSettings.findOne({ key: 'lessonInfo' });
+            const lessonStartTime = settings?.value?.lessonStartTime || '09:00';
+
+            // Determine status based on time
+            // Compare HH:MM strings (e.g. "09:05" > "09:00" is true)
+            const scanStatus = (timeStr > lessonStartTime) ? 'late' : 'present';
+
             let attRecord = await Attendance.findOne({ studentId: student._id, date: todayStr });
 
-            let statusMessage = 'Vaxtında';
+            let statusMessage = (scanStatus === 'late') ? 'Gecikdi' : 'Vaxtında';
 
             if (!attRecord) {
-                // First scan -> Present
+                // First scan -> Use calculated status
                 attRecord = await Attendance.create({
                     studentId: student._id,
                     nfcUid: nfcData,
                     date: todayStr,
                     time: timeStr,   // Baku Time HH:mm
-                    status: 'present',
+                    status: scanStatus,
                     scanTime: now,   // Actual UTC timestamp
                     autoMarked: false
                 });
             } else if (attRecord.status === 'absent') {
-                // Was marked absent -> Change to Late
-                attRecord.status = 'late';
+                // Was marked absent -> Update with correct status (Present or Late)
+                attRecord.status = scanStatus;
                 attRecord.scanTime = now;
                 attRecord.time = timeStr; // Update to actual Baku scan time
                 attRecord.autoMarked = false;
                 await attRecord.save();
-                statusMessage = 'Gecikdi';
+                // statusMessage set above
             } else {
                 statusMessage = 'Artıq qeyd olunub';
             }
