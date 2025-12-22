@@ -4,7 +4,7 @@ const Attendance = require('../models/Attendance');
 const SystemSettings = require('../models/SystemSettings');
 
 // Default lesson time if not set
-const DEFAULT_START_TIME = '09:00';
+const DEFAULT_START_TIME = '05:43';
 
 const getTodayDateString = () => {
     const d = new Date();
