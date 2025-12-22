@@ -193,7 +193,7 @@ const Dashboard = () => {
                 startTime: lessonStartTime,
                 endTime: lessonEndTime
             });
-            alert('Ayarlar yadda saxlanıldı! ✅');
+            alert('Ayarlar yadda saxlanıldı ✅');
         } catch {
             alert('Xəta baş verdi');
         }
