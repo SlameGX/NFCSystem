@@ -1,6 +1,6 @@
 /* ================= MODAL BACKDROP ================= */
 .modal-backdrop {
-    position: fixed;
+    position: fixed;                 /* ⬅️ BUNA DOKUNMUYORUZ */
     inset: 0;
     background: rgba(0,0,0,0.65);
     backdrop-filter: blur(8px);
@@ -14,9 +14,9 @@
 
 /* ================= MODAL PANEL ================= */
 .modal-panel {
-    /* 🔥 KRİTİK KISIM */
-    position: fixed;
-    top: 50%;
+    /* 🔥 SADECE BURASI DEĞİŞTİ */
+    position: absolute;              /* ❌ fixed DEĞİL */
+    top: 50vh;                       /* ❌ 50% DEĞİL */
     left: 50%;
     transform: translate(-50%, -50%);
 
