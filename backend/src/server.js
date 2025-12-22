@@ -9,7 +9,7 @@ const StudentAuth = require('./models/StudentAuth');
 const Attendance = require('./models/Attendance');
 const SystemSettings = require('./models/SystemSettings');
 const LessonSchedule = require('./models/LessonSchedule');
-const { startScheduler } = require('./services/attendanceScheduler');
+const { startScheduler, checkAttendance } = require('./services/attendanceScheduler');
 
 const app = express();
 const PORT = 5000;
@@ -459,6 +459,8 @@ app.post('/api/settings/schedule', async (req, res) => {
                 { value: { lessonStartTime: startTime, lessonEndTime: endTime } },
                 { upsert: true, new: true }
             );
+            // Trigger check immediately to reset if needed
+            await checkAttendance();
             return res.json({ success: true, type: 'global' });
         } catch (err) {
             return res.status(500).json({ message: 'Global ayar xətası' });
@@ -472,6 +474,8 @@ app.post('/api/settings/schedule', async (req, res) => {
             { startTime, endTime },
             { upsert: true, new: true }
         );
+        // Trigger check immediately to reset if needed
+        await checkAttendance();
         res.json({ success: true, type: 'custom' });
     } catch (err) {
         res.status(500).json({ message: 'Tarix ayarı xətası' });

@@ -100,10 +100,10 @@ const checkAttendance = async () => {
 
 
 const startScheduler = () => {
-    // Run every 5 minutes to ensure we cover the time even if restart happens
+    // Run every minute to ensure we cover the time even if restart happens
     // Does not duplicate because we check if record exists
-    cron.schedule('*/5 * * * *', checkAttendance);
-    console.log('📅 Attendance Scheduler Started (Runs every 5 mins)');
+    cron.schedule('* * * * *', checkAttendance);
+    console.log('📅 Attendance Scheduler Started (Runs every 1 min)');
 };
 
 module.exports = { startScheduler, checkAttendance };
